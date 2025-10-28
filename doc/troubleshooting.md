@@ -21,6 +21,9 @@ Common issues
 - Ensure gateway is reachable; device will attempt DHCP first. If gateway is `192.168.1.1` the device will assign itself `192.168.1.200` (per code). If your router blocks static IPs or uses a different subnet, adjust logic accordingly.
 - Check Serial output — it prints DHCP IP, Gateway and subsequent IP attempts.
 
+Additional note about AP vs STA runtime behavior
+- If the device is running in AP mode (`wifiMode == AP`) the firmware will NOT attempt to reconnect to a station network from the main loop. This is by design: when acting as an access point the device should remain in AP mode and not trigger station reconnects. If you expect the device to connect to a saved WiFi network, switch the mode to `STA` (via `/api/wifi/mode`) and restart the device.
+
 4) IP conflict or unreachable static IP
 - The firmware attempts to pick a stable IP derived from MAC. If another device already uses the same static IP, you may lose connectivity. In that case:
   - Connect to the router and change the reserved IP for the device by MAC.
@@ -28,6 +31,9 @@ Common issues
 
 5) Token/authentication errors
 - Token is checked by `checkAuthorization()` helper. If `Token missing` or `Invalid token` responses are seen, verify Authorization header format: `Authorization: Bearer <token>`.
+
+6) "Handler did not handle the request" on `/api/validate`
+- If you see a runtime message like "Handler did not handle the request" when calling `/api/validate`, confirm you're not sending an upload-style POST (with body upload) to that endpoint. The firmware registers a request-only handler for `/api/validate` that expects no body and only checks the `Authorization` header. Sending an upload-style request can cause the Async server to look for a body handler and then report that message.
 
 Debugging tips
 --------------

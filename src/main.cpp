@@ -7,8 +7,10 @@
 #include "DeviceManager.h"
 #include <EEPROM.h>
 #include <Preferences.h>
+#include <nvs_flash.h>
 
-enum Mode {
+enum Mode
+{
     AP,
     STA
 };
@@ -16,8 +18,8 @@ enum Mode {
 Mode wifiMode = AP;
 
 // Access Point Settings
-const char* ESP32_SSID = "ESP32_Device_Manager";
-const char* ESP32_PASSWORD = "esp32password";
+const char *ESP32_SSID = "ESP32_Device_Manager";
+const char *ESP32_PASSWORD = "esp32password";
 
 // WiFi Credentials Storage
 Preferences preferences;
@@ -28,7 +30,7 @@ const char *AUTH_TOKEN = "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaW
 
 // Function declarations
 void connectToWiFi();
-void saveWiFiCredentials(const char* ssid, const char* password);
+void saveWiFiCredentials(const char *ssid, const char *password);
 bool loadWiFiCredentials(String &ssid, String &password);
 void setupAPMode();
 void saveWiFiMode(Mode m);
@@ -41,7 +43,7 @@ void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, s
 void handleConnect(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 void handleGetDevices(AsyncWebServerRequest *request);
 void handleControl(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
-void handleValidate(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleValidateRequest(AsyncWebServerRequest *request);
 
 // Global instances
 AsyncWebServer server(80);
@@ -89,7 +91,7 @@ void setup()
 
     // Setup API endpoints with OPTIONS handling
     server.onNotFound([](AsyncWebServerRequest *request)
-    {
+                      {
         if (request->method() == HTTP_OPTIONS) {
             handleOptionsRequest(request);
         } else {
@@ -101,8 +103,7 @@ void setup()
             AsyncWebServerResponse *resp = request->beginResponse(404, "application/json", jsonResponse);
             addCorsHeaders(resp);
             request->send(resp);
-        }
-    });
+        } });
 
     // Start server
     server.begin();
@@ -118,14 +119,21 @@ void loop()
     {
         lastWiFiCheck = millis();
 
-        if (WiFi.status() != WL_CONNECTED)
+        // Only attempt to reconnect when running in STA mode.
+        // In AP mode we host an access point and should not try to reconnect
+        // as a station — attempting to do so causes unnecessary disconnects
+        // and reconnect loops.
+        if (wifiMode == STA)
         {
-            Serial.println("WiFi connection lost!");
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                Serial.println("WiFi connection lost!");
 
-            // Try to reconnect
-            WiFi.disconnect();
-            delay(1000);
-            connectToWiFi();
+                // Try to reconnect
+                WiFi.disconnect();
+                delay(1000);
+                connectToWiFi();
+            }
         }
     }
 
@@ -134,7 +142,8 @@ void loop()
 }
 
 // Function to save WiFi credentials
-void saveWiFiCredentials(const char* ssid, const char* password) {
+void saveWiFiCredentials(const char *ssid, const char *password)
+{
     preferences.begin("wifi", false);
     preferences.putString("ssid", ssid);
     preferences.putString("password", password);
@@ -143,7 +152,8 @@ void saveWiFiCredentials(const char* ssid, const char* password) {
 }
 
 // Save WiFi mode (AP or STA) persistently
-void saveWiFiMode(Mode m) {
+void saveWiFiMode(Mode m)
+{
     preferences.begin("wifi", false);
     // store as unsigned int (0 = AP, 1 = STA)
     preferences.putUInt("mode", (unsigned int)m);
@@ -151,7 +161,8 @@ void saveWiFiMode(Mode m) {
 }
 
 // Load saved WiFi mode; default to AP when not present
-Mode loadWiFiMode() {
+Mode loadWiFiMode()
+{
     preferences.begin("wifi", true);
     unsigned int v = preferences.getUInt("mode", (unsigned int)AP);
     preferences.end();
@@ -159,10 +170,12 @@ Mode loadWiFiMode() {
 }
 
 // Function to load WiFi credentials
-bool loadWiFiCredentials(String &ssid, String &password) {
+bool loadWiFiCredentials(String &ssid, String &password)
+{
     preferences.begin("wifi", true);
     bool configured = preferences.getBool("configured", false);
-    if (configured) {
+    if (configured)
+    {
         ssid = preferences.getString("ssid", "");
         password = preferences.getString("password", "");
     }
@@ -171,14 +184,15 @@ bool loadWiFiCredentials(String &ssid, String &password) {
 }
 
 // Function to setup AP mode
-void setupAPMode() {
+void setupAPMode()
+{
     Serial.println("Setting up Access Point...");
     WiFi.mode(WIFI_AP);
     // Use the requested AP network: gateway and AP IP 192.168.10.1
-    IPAddress apGateway(192,168,10,1);
+    IPAddress apGateway(192, 168, 10, 1);
     IPAddress apIP = apGateway; // AP IP will be 192.168.10.1
 
-    IPAddress apSubnet(255,255,255,0);
+    IPAddress apSubnet(255, 255, 255, 0);
     WiFi.softAPConfig(apIP, apGateway, apSubnet);
     WiFi.softAP(ESP32_SSID, ESP32_PASSWORD);
     Serial.println("Access Point Started");
@@ -187,14 +201,17 @@ void setupAPMode() {
 }
 
 // Function to handle WiFi connection
-void connectToWiFi() {
-    if (wifiMode == AP) {
+void connectToWiFi()
+{
+    if (wifiMode == AP)
+    {
         setupAPMode();
         return;
     }
 
     String saved_ssid, saved_password;
-    if (!loadWiFiCredentials(saved_ssid, saved_password)) {
+    if (!loadWiFiCredentials(saved_ssid, saved_password))
+    {
         Serial.println("No WiFi credentials found");
         return;
     }
@@ -206,13 +223,15 @@ void connectToWiFi() {
 
     // Wait for connection for up to 10 seconds
     uint8_t attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 10)
+    {
         delay(1000);
         Serial.print(".");
         attempts++;
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
+    if (WiFi.status() != WL_CONNECTED)
+    {
         Serial.println("\nFailed to connect (DHCP)");
         return;
     }
@@ -220,51 +239,47 @@ void connectToWiFi() {
     // We have a DHCP address; obtain gateway/subnet
     IPAddress gw = WiFi.gatewayIP();
     IPAddress subnet = WiFi.subnetMask();
+    IPAddress local = WiFi.localIP();
     Serial.println();
-    Serial.print("DHCP IP: "); Serial.println(WiFi.localIP());
-    Serial.print("Gateway: "); Serial.println(gw);
+    Serial.print("DHCP IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Subnet: ");
+    Serial.println(subnet);
+    Serial.print("Gateway: ");
+    Serial.println(gw);
 
-    // Derive a stable, unique host address from MAC, but special-case common router
-    String mac = WiFi.macAddress();
-    uint8_t macLast = 0;
-    int idx = mac.lastIndexOf(':');
-    if (idx >= 0) {
-        String last = mac.substring(idx + 1);
-        macLast = (uint8_t)strtoul(last.c_str(), NULL, 16);
-    }
-
-    IPAddress staticIP = gw; // copy network prefix
-    // Special-case: if gateway is 192.168.1.1 assign 192.168.1.200
-    if (gw == IPAddress(192,168,1,1)) {
-        staticIP = IPAddress(192,168,1,200);
-    } else {
-        // compute candidate in the .10 - .250 range based on MAC
-        uint8_t candidate = 10 + (macLast % 240);
-        if (candidate == gw[3]) candidate = (candidate < 250) ? candidate + 1 : candidate - 1;
-        staticIP[3] = candidate;
-    }
+    IPAddress staticIP = gw;
+    staticIP[3] = 200; // choose your desired host part
 
     // Apply static IP by reconfiguring then reconnecting
-    Serial.print("Configuring static IP: "); Serial.println(staticIP);
-    WiFi.disconnect();
-    delay(200);
-    if (!WiFi.config(staticIP, gw, subnet)) {
+    Serial.print("Configuring static IP: ");
+    Serial.println(staticIP);
+    WiFi.disconnect(true);
+    delay(500);
+    WiFi.mode(WIFI_STA);
+
+    if (!WiFi.config(staticIP, gw, subnet))
+    {
         Serial.println("Failed to set static IP (WiFi.config returned false)");
     }
 
     WiFi.begin(saved_ssid.c_str(), saved_password.c_str());
     attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
+    while (WiFi.status() != WL_CONNECTED && attempts < 10)
+    {
         delay(1000);
         Serial.print("+");
         attempts++;
     }
 
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED)
+    {
         Serial.println("\nConnected with static IP");
         Serial.print("IP Address: ");
         Serial.println(WiFi.localIP());
-    } else {
+    }
+    else
+    {
         Serial.println("\nFailed to connect with static IP, falling back to DHCP IP");
         // optionally fall back to DHCP — try to reconnect normally
         WiFi.disconnect();
@@ -520,9 +535,11 @@ void handleValidateRequest(AsyncWebServerRequest *request)
 }
 
 // Handler for WiFi mode changes
-void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+{
     // Check authorization first
-    if (!checkAuthorization(request)) {
+    if (!checkAuthorization(request))
+    {
         return;
     }
 
@@ -536,22 +553,27 @@ void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, s
     DynamicJsonDocument response(200);
     int statusCode = 200;
 
-    if (error) {
+    if (error)
+    {
         response["message"] = "Invalid JSON";
         response["status"] = false;
         statusCode = 400;
-    } else {
-        const char* mode = doc["mode"];
-        
-        if (mode) {
-            if (strcmp(mode, "AP") == 0 || strcmp(mode, "STA") == 0) {
+    }
+    else
+    {
+        const char *mode = doc["mode"];
+
+        if (mode)
+        {
+            if (strcmp(mode, "AP") == 0 || strcmp(mode, "STA") == 0)
+            {
                 wifiMode = (strcmp(mode, "AP") == 0) ? AP : STA;
                 // Persist the mode so it survives reboot
                 saveWiFiMode(wifiMode);
 
                 response["message"] = String("Mode changed to ") + mode + ". Please restart the device manually to apply this change.";
                 response["status"] = true;
-                
+
                 // Send response; do NOT restart automatically (user requested)
                 String jsonResponse;
                 serializeJson(response, jsonResponse);
@@ -559,12 +581,16 @@ void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, s
                 addCorsHeaders(resp);
                 request->send(resp);
                 return;
-            } else {
+            }
+            else
+            {
                 response["message"] = "Invalid mode. Use 'AP' or 'STA'";
                 response["status"] = false;
                 statusCode = 400;
             }
-        } else {
+        }
+        else
+        {
             response["message"] = "Mode not specified";
             response["status"] = false;
             statusCode = 400;
@@ -579,9 +605,11 @@ void handleWiFiMode(AsyncWebServerRequest *request, uint8_t *data, size_t len, s
 }
 
 // Handler for WiFi setup endpoint
-void handleWiFiSetup(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+void handleWiFiSetup(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+{
     // Require authorization
-    if (!checkAuthorization(request)) {
+    if (!checkAuthorization(request))
+    {
         return;
     }
 
@@ -595,21 +623,27 @@ void handleWiFiSetup(AsyncWebServerRequest *request, uint8_t *data, size_t len, 
     DynamicJsonDocument response(200);
     int statusCode = 200;
 
-    if (error) {
+    if (error)
+    {
         response["message"] = "Invalid JSON";
         response["status"] = false;
         statusCode = 400;
-    } else {
-        const char* ssid = doc["ssid"];
-        const char* password = doc["password"];
+    }
+    else
+    {
+        const char *ssid = doc["ssid"];
+        const char *password = doc["password"];
 
-        if (ssid && password && strlen(ssid) > 0 && strlen(password) > 0) {
+        if (ssid && password && strlen(ssid) > 0 && strlen(password) > 0)
+        {
             // Save the credentials only; do NOT attempt to connect here
             saveWiFiCredentials(ssid, password);
 
             response["message"] = "WiFi credentials saved please change Access mode";
             response["status"] = true;
-        } else {
+        }
+        else
+        {
             response["message"] = "Missing SSID or password";
             response["status"] = false;
             statusCode = 400;

@@ -35,6 +35,10 @@ WiFi mode lifecycle
   - STA: loads saved SSID/password from Preferences and attempts to connect via DHCP to discover the gateway and subnet. If gateway is 192.168.1.1, the device will set a static IP 192.168.1.200; otherwise a MAC-derived static IP is computed and applied.
 - Mode change via `/api/wifi/mode` stores the requested mode and requires a manual restart to take effect.
 
+Runtime reconnection behavior
+-----------------------------
+- The main loop only attempts to reconnect to a WiFi network when the device is running in STA mode. When `wifiMode == AP` the firmware intentionally skips station reconnect attempts to avoid disconnecting or interfering with the local access point. This prevents reconnect loops and unintended disconnects when the device is acting as an AP.
+
 Networking decisions
 -------------------
 - AP uses 192.168.10.1 to be consistent with typical mobile AP subnets (user-specified requirement).
@@ -47,6 +51,10 @@ Security
 --------
 - The current authentication mechanism is intentionally simple: a single `AUTH_TOKEN` and an `AUTH_PASSWORD`. Protect these values in production or replace with a robust authentication flow (JWT, OAuth2, or a per-device generated token).
 - Credentials are stored in Preferences (not encrypted). For sensitive deployments, encrypt or protect the storage.
+
+Validate endpoint handling
+-------------------------
+- The `/api/validate` endpoint is implemented with a request-only handler (it inspects the `Authorization` header and returns success/failure). There is also an internal data-handler variant available in code, but the server registers the request-only handler for the route. This is intentional so the endpoint works without sending a request body.
 
 Extensibility
 -------------

@@ -50,6 +50,8 @@ Endpoints
 6) POST /api/validate
 - Purpose: Validate the token (request has no body)
 - Authentication: Requires `Authorization: Bearer <token>`
+- Request: No JSON body is required or expected. The endpoint only checks the `Authorization` header.
+- Implementation note: The firmware registers a request-only handler for this route (no body upload handler). Using a body-upload style handler for this endpoint may trigger "Handler did not handle the request" errors.
 - Response: { "message": "Token valid", "status": true }
 
 CORS
